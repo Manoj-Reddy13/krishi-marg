@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, Route, Routes, Link, useNavigate, useLocation } from 'react-router-dom'
-import api, { login, logout, user } from './api'
+import api, { login, logout, user, getApiBaseUrl, setApiBaseUrl } from './api'
 import type { Role, Shipment } from './types'
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -47,6 +47,8 @@ function Login(){
   const [pw, setPw] = useState('demo123')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [configuredApi, setConfiguredApi] = useState(getApiBaseUrl())
+  const [customApiSaved, setCustomApiSaved] = useState(false)
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -178,6 +180,42 @@ function Login(){
             {busy ? 'Signing in...' : 'Sign in'}
           </button>
 
+          <div style={{ marginTop: '16px', padding: '12px 14px', background: '#eef3eb', borderRadius: '10px', border: '1px solid #d4ded3' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#2b4436', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                🔗 Backend API Endpoint
+              </span>
+              {customApiSaved && (
+                <span style={{ fontSize: '10px', color: '#2e7d32', fontWeight: 700 }}>
+                  ✓ Connected & Saved
+                </span>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="text"
+                value={configuredApi}
+                onChange={(e) => setConfiguredApi(e.target.value)}
+                placeholder="https://krishi-marg-xxxx.onrender.com"
+                style={{ flex: 1, padding: '7px 9px', fontSize: '11px', borderRadius: '7px', border: '1px solid #c2cdc1', background: '#fff' }}
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  setApiBaseUrl(configuredApi)
+                  setCustomApiSaved(true)
+                  setErr('')
+                  setTimeout(() => setCustomApiSaved(false), 3000)
+                }}
+                style={{ padding: '7px 12px', background: '#183e2d', color: '#fff', borderRadius: '7px', fontSize: '11px', fontWeight: 700, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Set URL
+              </button>
+            </div>
+            <div style={{ fontSize: '10px', color: '#68776d', marginTop: '6px' }}>
+              Current target: <code style={{ color: '#183e2d', fontWeight: 600 }}>{getApiBaseUrl()}</code>
+            </div>
+          </div>
         </form>
 
         <div className="demo-grid">

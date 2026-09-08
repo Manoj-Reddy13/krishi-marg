@@ -1,6 +1,28 @@
 import axios from 'axios'
 
-export const API = ((import.meta as any).env?.VITE_API_URL as string) || 'http://127.0.0.1:8000'
+export function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('km_api_url')
+    if (custom && custom.trim()) {
+      return custom.trim().replace(/\/$/, '')
+    }
+  }
+  const envUrl = ((import.meta as any).env?.VITE_API_URL as string)
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/$/, '')
+  }
+  return 'http://127.0.0.1:8000'
+}
+
+export function setApiBaseUrl(url: string) {
+  const clean = url.trim().replace(/\/$/, '')
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('km_api_url', clean)
+  }
+  client.defaults.baseURL = clean
+}
+
+export const API = getApiBaseUrl()
 
 const client = axios.create({
   baseURL: API,
@@ -10,6 +32,7 @@ const client = axios.create({
 })
 
 client.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl()
   const token = localStorage.getItem('km_token')
 
   if (token) {
@@ -42,8 +65,9 @@ export async function login(email: string, password: string) {
       )
     }
 
+    const currentUrl = getApiBaseUrl()
     throw new Error(
-      'Cannot connect to backend. Make sure FastAPI is running on port 8000.'
+      `Cannot connect to backend (${currentUrl}). Make sure FastAPI is running or update the Backend API URL below.`
     )
   }
 }
