@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt
-from passlib.context import CryptContext
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -8,14 +8,19 @@ from .config import settings
 from .database import get_db
 from .models import User
 
-pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def hash_password(password: str) -> str:
-    return pwd.hash(password)
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def verify_password(password: str, hashed: str) -> bool:
-    return pwd.verify(password, hashed)
+    try:
+        pwd_bytes = password.encode('utf-8')[:72]
+        return bcrypt.checkpw(pwd_bytes, hashed.encode('utf-8'))
+    except Exception:
+        return False
 
 def create_token(user: User):
     exp = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
