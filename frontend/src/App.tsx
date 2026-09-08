@@ -15,10 +15,10 @@ const demoAccounts: Record<Role,string> = {
 }
 
 function App(){
-  const u=user()
+  const [u, setU] = useState<any>(() => user())
   return <Routes>
     <Route path="/" element={<LandingPage />} />
-    <Route path="/login" element={<Login/>}/>
+    <Route path="/login" element={<Login onLoginSuccess={(loggedIn) => setU(loggedIn)}/>}/>
     <Route path="/app/*" element={u?<RoleApp role={u.role} u={u}/>:<Navigate to="/login" replace/>}/>
     <Route path="*" element={<Navigate to="/" replace/>}/>
   </Routes>
@@ -40,7 +40,7 @@ function Landing(){
   </div>
 }
 function featureIndex(s:string){return ['Demand aggregation','Grade-aware pricing','Traceable lots','Freshness-first routing'].indexOf(s)+1}
-function Login(){
+function Login({ onLoginSuccess }: { onLoginSuccess?: (u: any) => void }){
   const nav = useNavigate()
 
   const [email, setEmail] = useState(demoAccounts.admin)
@@ -69,13 +69,10 @@ function Login(){
         throw new Error('User information was not returned by the server.')
       }
 
-      /*
-       * Force a fresh React load after authentication.
-       * This makes App() read the newly stored km_user
-       * from localStorage and prevents the old login state
-       * from remaining on screen.
-       */
-      window.location.href = '/app'
+      if (onLoginSuccess) {
+        onLoginSuccess(loggedInUser)
+      }
+      nav('/app')
 
     } catch (error: any) {
       console.error('LOGIN FAILED:', error)
