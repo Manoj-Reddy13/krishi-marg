@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: krishi-marg-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: krishi_marg
+      POSTGRES_USER: krishi
+      POSTGRES_PASSWORD: krishi
+    ports:
+      - "5432:5432"
+    volumes:
+      - krishi_pg:/var/lib/postgresql/data
+
+volumes:
+  krishi_pg:

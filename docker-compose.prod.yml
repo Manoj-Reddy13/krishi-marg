@@ -1,0 +1,50 @@
+﻿services:
+  db:
+    image: postgres:16-alpine
+    container_name: krishi-marg-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: krishi_marg
+      POSTGRES_USER: krishi
+      POSTGRES_PASSWORD: krishi
+    ports:
+      - "5432:5432"
+    volumes:
+      - krishi_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U krishi -d krishi_marg"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: krishi-marg-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://krishi:krishi@db:5432/krishi_marg
+      SECRET_KEY: km_sih_2026_super_secret_jwt_key
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
+    container_name: krishi-marg-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  krishi_pg:
