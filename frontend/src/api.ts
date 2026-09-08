@@ -11,7 +11,10 @@ export function getApiBaseUrl(): string {
   if (envUrl && envUrl.trim()) {
     return envUrl.trim().replace(/\/$/, '')
   }
-  return 'http://127.0.0.1:8000'
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    return 'http://127.0.0.1:8000'
+  }
+  return 'https://krishi-marg.onrender.com'
 }
 
 export function setApiBaseUrl(url: string) {
