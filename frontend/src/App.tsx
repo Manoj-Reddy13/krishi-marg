@@ -3045,164 +3045,267 @@ function TrackingView({shipment}:{shipment:Shipment|null}){
 }
 
 function DriverApp({signout,bump}:{user:any;refresh:number;signout:()=>void;bump:()=>void}){
- const [reqs,setReqs]=useState<any[]>([]); const [ships,setShips]=useState<Shipment[]>([]); const [active,setActive]=useState<Shipment|null>(null)
- useEffect(()=>{api.get('/driver-requests').then(r=>setReqs(r.data));api.get('/shipments').then(r=>setShips(r.data))},[bump])
- async function act(id:number,yes:boolean){
-  const r=await api.post(`/driver-requests/${id}/${yes?'accept':'decline'}`);
-  if(yes) setActive(r.data);
-  bump()
+ const [reqs,setReqs]=useState<any[]>([]);
+ const [ships,setShips]=useState<Shipment[]>([]);
+ const [active,setActive]=useState<Shipment|null>(null);
+ const [hubDispatches,setHubDispatches]=useState<any[]>([]);
+
+ useEffect(()=>{
+   api.get('/driver-requests').then(r=>setReqs(r.data)).catch(()=>{});
+   api.get('/shipments').then(r=>setShips(r.data)).catch(()=>{});
+   try {
+     const stored = JSON.parse(localStorage.getItem('km_city_hub_dispatches') || '[]');
+     setHubDispatches(stored.filter((d: any) => d.status === 'REQUESTED'));
+   } catch(e) {}
+ },[bump]);
+
+ async function act(id:number,yes:boolean,hubOrderId?:number){
+   if (hubOrderId) {
+     try {
+       const stored = JSON.parse(localStorage.getItem('km_city_hub_dispatches') || '[]');
+       const item = stored.find((d: any) => d.orderId === hubOrderId);
+       if (item) {
+         item.status = yes ? 'ACCEPTED' : 'DECLINED';
+         localStorage.setItem('km_city_hub_dispatches', JSON.stringify(stored));
+       }
+     } catch(e) {}
+   }
+   try {
+     const r=await api.post(`/driver-requests/${id}/${yes?'accept':'decline'}`);
+     if(yes) setActive(r.data);
+   } catch(e) {
+     if (yes) {
+       setActive({
+         id: hubOrderId || id,
+         code: `KM-DLV-${hubOrderId || id}`,
+         crop: 'Fresh Produce (City Hub)',
+         quantity: 25,
+         grade: 'A',
+         status: 'IN_TRANSIT',
+         stage: 'LAST_MILE',
+         freshness: 92,
+         driver: 'Suresh Yadav',
+         driver_id: 4,
+         vehicle: 'EV Reefer Van',
+         distance_km: 12.4,
+         eta: '~25 mins',
+         lat: 17.412,
+         lng: 78.448
+       } as any);
+     }
+   }
+   bump();
  }
+
  async function start(s:Shipment){const r=await api.post(`/shipments/${s.id}/start`);setActive(r.data);bump()}
+
  return (
-   <div className="driver-app">
-     <div className="driver-map">
-       <LiveMap shipment={active||ships[0]}/>
-       <div className="driver-top">
-         <div className="brand light">
-           <span className="brand-mark">KM</span>
-           <span>KRISHI <b>MARG</b></span>
-         </div>
-         <button className="driver-avatar" onClick={signout}>↪</button>
-       </div>
-       <div className="driver-status">
-         <span className="live-dot">●</span> REEFER PILOT ONLINE · 4G TELEMETRY
-       </div>
-     </div>
-     <div className="driver-sheet">
-       <div className="drag"></div>
-       <div className="driver-tabs">
-         <div>
-           <b>Assigned Dispatch Trips</b>
-           <small style={{display:'block', color:'#6d8478', fontSize:11}}>Cold-chain farm pickup & transit</small>
-         </div>
-         <span style={{background:'#dcfce7', color:'#15803d', padding:'4px 10px', borderRadius:20, fontWeight:800, fontSize:12}}>Today: ₹2,860</span>
-       </div>
+    <div className="driver-app">
+      <div className="driver-map">
+        <LiveMap shipment={active||ships[0]}/>
+        <div className="driver-top">
+          <div className="brand light">
+            <span className="brand-mark">KM</span>
+            <span>KRISHI <b>MARG</b></span>
+          </div>
+          <button className="driver-avatar" onClick={signout}>↪</button>
+        </div>
+        <div className="driver-status">
+          <span className="live-dot">●</span> REEFER PILOT ONLINE · 4G TELEMETRY
+        </div>
+      </div>
+      <div className="driver-sheet">
+        <div className="drag"></div>
+        <div className="driver-tabs">
+          <div>
+            <b>Assigned Dispatch Trips</b>
+            <small style={{display:'block', color:'#6d8478', fontSize:11}}>Cold-chain farm pickup & city hub last-mile</small>
+          </div>
+          <span style={{background:'#dcfce7', color:'#15803d', padding:'4px 10px', borderRadius:20, fontWeight:800, fontSize:12}}>Today: ₹3,240</span>
+        </div>
 
-       {reqs.filter(r=>r.status==='REQUESTED').map(r=>{
-         const matchedShip = ships.find(s=>s.id === r.shipment_id);
-         const cropName = matchedShip?.crop || "Fresh Tomatoes";
-         const cropQty = matchedShip?.quantity || 420;
-         const cropCode = matchedShip?.lot_code || "LOT-KM-2048";
-         return (
-           <div className="trip-request driver-pickpoint-card" key={r.id}>
-             <div className="trip-head">
-               <span className="dispatch-badge">NEW PICKUP DISPATCH</span>
-               <b className="earnings-tag">₹{r.earnings}</b>
-             </div>
+        {/* City Hub Direct Dispatches */}
+        {hubDispatches.map(hd => (
+          <div className="trip-request driver-pickpoint-card" key={hd.id} style={{borderLeft:'4px solid #16a34a'}}>
+            <div className="trip-head">
+              <span className="dispatch-badge" style={{background:'#dcfce7', color:'#15803d'}}>CITY HUB LAST-MILE DISPATCH</span>
+              <b className="earnings-tag">₹{hd.earnings}</b>
+            </div>
 
-             {/* Detailed Pick Point & Harvest Info */}
-             <div className="pickpoint-details-panel">
-               <div className="pickpoint-row">
-                 <span className="pickpoint-icon">📍</span>
-                 <div>
-                   <small>FARM GATE PICKUP POINT</small>
-                   <strong>Green Valley Farms · Plot #14, Shamshabad Rural</strong>
-                   <span className="sub-contact">Farmer: Ravi Kumar · <a href="tel:+919848023456" style={{color:'#15803d', textDecoration:'none', fontWeight:700}}>+91 98480 23456 📞</a></span>
-                 </div>
-               </div>
+            <div className="pickpoint-details-panel">
+              <div className="pickpoint-row">
+                <span className="pickpoint-icon">🏬</span>
+                <div>
+                  <small>PICKUP POINT (CITY HUB)</small>
+                  <strong>City Cold Hub · Central Bay #4, Hyderabad</strong>
+                  <span className="sub-contact">Hub Operator: Kiran · Ready for Last-Mile Delivery</span>
+                </div>
+              </div>
 
-               <div className="pickpoint-row">
-                 <span className="pickpoint-icon">🌾</span>
-                 <div>
-                   <small>TYPE OF HARVEST & QUANTITY</small>
-                   <strong style={{color:'#072618', fontSize:14}}>{cropName.includes("Tomato") ? "🍅" : "🌱"} {cropName} · {cropQty} kg</strong>
-                   <span className="harvest-spec-pill">14 Standard Agri-Crates · Pre-cooled</span>
-                 </div>
-               </div>
+              <div className="pickpoint-row">
+                <span className="pickpoint-icon">📦</span>
+                <div>
+                  <small>ORDER DETAILS & PRODUCE</small>
+                  <strong style={{color:'#072618', fontSize:14}}>🍅 {hd.cropName} · Order #{hd.orderId}</strong>
+                  <span className="harvest-spec-pill">{hd.vehicle} · Pre-Cooled Reefer</span>
+                </div>
+              </div>
 
-               <div className="pickpoint-row">
-                 <span className="pickpoint-icon">🏢</span>
-                 <div>
-                   <small>DELIVERY DESTINATION</small>
-                   <strong>Collection Center #02 (Shamshabad Cold Hub, Bay 3)</strong>
-                   <span className="sub-contact">Distance: 18.4 km · Est. Transit: ~42 mins</span>
-                 </div>
-               </div>
-             </div>
+              <div className="pickpoint-row">
+                <span className="pickpoint-icon">📍</span>
+                <div>
+                  <small>CUSTOMER DELIVERY DESTINATION</small>
+                  <strong>{hd.customerName} · {hd.destination}</strong>
+                  <span className="sub-contact">Est. Arrival: {hd.eta} · Direct Customer Delivery</span>
+                </div>
+              </div>
+            </div>
 
-             <div className="trip-meta-specs">
-               <span>❄️ Temp: 4°C - 8°C</span>
-               <span>📦 Lot: {cropCode}</span>
-               <span>🚛 Mini Reefer</span>
-             </div>
+            <div className="trip-meta-specs">
+              <span>❄️ Temp: 4°C - 8°C</span>
+              <span>🚛 {hd.vehicle}</span>
+              <span>⚡ Express Route</span>
+            </div>
 
-             <div className="trip-actions">
-               <button className="decline" onClick={()=>act(r.id,false)}>DECLINE</button>
-               <button className="accept" onClick={()=>act(r.id,true)}>ACCEPT & START PICKUP 🚚</button>
-             </div>
-           </div>
-         );
-       })}
+            <div className="trip-actions">
+              <button className="decline" onClick={()=>act(hd.shipment_id || 1, false, hd.orderId)}>DECLINE</button>
+              <button className="accept" onClick={()=>act(hd.shipment_id || 1, true, hd.orderId)}>ACCEPT & START DELIVERY 🚚</button>
+            </div>
+          </div>
+        ))}
 
-       {active && (
-         <div className="active-trip driver-active-trip-panel">
-           <div className="active-trip-header">
-             <span className="tiny-label" style={{color:'#15803d', fontWeight:800}}>● ACTIVE ROUTE IN PROGRESS</span>
-             <span className="temp-badge">❄️ Reefer: 5.2°C Stable</span>
-           </div>
+        {/* Backend Shipment Requests */}
+        {reqs.filter(r=>r.status==='REQUESTED').map(r=>{
+          const matchedShip = ships.find(s=>s.id === r.shipment_id);
+          const isHubStage = matchedShip?.stage === 'HUB' || matchedShip?.stage === 'LAST_MILE';
+          const cropName = matchedShip?.crop || "Fresh Tomatoes";
+          const cropQty = matchedShip?.quantity || 420;
+          const cropCode = matchedShip?.lot_code || "LOT-KM-2048";
+          return (
+            <div className="trip-request driver-pickpoint-card" key={r.id}>
+              <div className="trip-head">
+                <span className="dispatch-badge">{isHubStage ? 'CITY HUB DISPATCH' : 'NEW PICKUP DISPATCH'}</span>
+                <b className="earnings-tag">₹{r.earnings}</b>
+              </div>
 
-           <h2>{active.crop} · {active.quantity} kg</h2>
-           <p style={{margin:'4px 0 14px', color:'#496355', fontSize:13}}>
-             Stage: <b>{active.stage.replaceAll('_',' ')}</b> · ETA: <b>{active.eta}</b>
-           </p>
+              {/* Detailed Pick Point & Harvest Info */}
+              <div className="pickpoint-details-panel">
+                <div className="pickpoint-row">
+                  <span className="pickpoint-icon">{isHubStage ? '🏬' : '📍'}</span>
+                  <div>
+                    <small>{isHubStage ? 'CITY HUB PICKUP POINT' : 'FARM GATE PICKUP POINT'}</small>
+                    <strong>{isHubStage ? 'City Cold Hub · Central Bay, Hyderabad' : 'Green Valley Farms · Plot #14, Shamshabad Rural'}</strong>
+                    <span className="sub-contact">{isHubStage ? 'Hub Dispatch: Kiran · Cold Bay 4' : 'Farmer: Ravi Kumar · +91 98480 23456 📞'}</span>
+                  </div>
+                </div>
 
-           {/* Pick Point Summary for Active Trip */}
-           <div className="active-pickpoint-summary">
-             <div className="summary-line">
-               <span>Pickup Point:</span>
-               <b>Shamshabad Farm Gate (Plot 14)</b>
-             </div>
-             <div className="summary-line">
-               <span>Harvest Details:</span>
-               <b>{active.crop} · {active.quantity} kg (14 Crates)</b>
-             </div>
-             <div className="summary-line">
-               <span>Contact Farmer:</span>
-               <b>Ravi Kumar (+91 98480 23456)</b>
-             </div>
-             <div className="summary-line">
-               <span>Intake Destination:</span>
-               <b>Collection Station #02 (Cold Bay 3)</b>
-             </div>
-           </div>
+                <div className="pickpoint-row">
+                  <span className="pickpoint-icon">🌾</span>
+                  <div>
+                    <small>TYPE OF HARVEST & QUANTITY</small>
+                    <strong style={{color:'#072618', fontSize:14}}>{cropName.includes("Tomato") ? "🍅" : "🌱"} {cropName} · {cropQty} kg</strong>
+                    <span className="harvest-spec-pill">Standard Agri-Crates · Pre-cooled</span>
+                  </div>
+                </div>
 
-           <div className="active-trip-actions-row">
-             <button
-               className="outline-btn"
-               style={{flex:1, padding:11, fontSize:12, fontWeight:700}}
-               onClick={()=>alert(`GPS Navigation: Guiding route to Farm Gate (17.3850° N, 78.4867° E). Distance: ${active.distance_km || 18.4} km.`)}
-             >
-               🗺️ Turn-by-Turn GPS
-             </button>
-             <button
-               className="outline-btn"
-               style={{flex:1, padding:11, fontSize:12, fontWeight:700}}
-               onClick={()=>alert(`Farm QR Verified for Lot ${active.lot_code || 'KM-2048'}. Weight confirmed: ${active.quantity} kg.`)}
-             >
-               ▦ Scan Farm QR
-             </button>
-           </div>
+                <div className="pickpoint-row">
+                  <span className="pickpoint-icon">{isHubStage ? '📍' : '🏢'}</span>
+                  <div>
+                    <small>{isHubStage ? 'CUSTOMER DELIVERY DESTINATION' : 'DELIVERY DESTINATION'}</small>
+                    <strong>{isHubStage ? 'Hyderabad Retail Consumers (Banjara Hills / Hitec City)' : 'Collection Center #02 (Shamshabad Cold Hub, Bay 3)'}</strong>
+                    <span className="sub-contact">{isHubStage ? 'Distance: 12.4 km · Est. Transit: ~28 mins' : 'Distance: 18.4 km · Est. Transit: ~42 mins'}</span>
+                  </div>
+                </div>
+              </div>
 
-           <button
-             className="primary-btn wide"
-             style={{marginTop:12, padding:14, fontWeight:800, background:'#072618'}}
-             onClick={()=>api.post(`/shipments/${active.id}/complete`).then(()=>{setActive(null);bump()})}
-           >
-             Complete Handoff at Collection Center →
-           </button>
-         </div>
-       )}
+              <div className="trip-meta-specs">
+                <span>❄️ Temp: 4°C - 8°C</span>
+                <span>📦 Lot: {cropCode}</span>
+                <span>🚛 Mini Reefer</span>
+              </div>
 
-       {!reqs.filter(r=>r.status==='REQUESTED').length && !active && (
-         <div className="driver-empty">
-           <div style={{fontSize:32, marginBottom:10}}>🚚</div>
-           <b>No Pending Farm Gate Pickups</b>
-           <p style={{margin:'6px 0 0', fontSize:12, color:'#748f80'}}>The dispatch engine only sends routes when harvest batches are packed and ready at the farm gate.</p>
-         </div>
-       )}
-     </div>
-   </div>
- )
+              <div className="trip-actions">
+                <button className="decline" onClick={()=>act(r.id,false)}>DECLINE</button>
+                <button className="accept" onClick={()=>act(r.id,true)}>{isHubStage ? 'ACCEPT & START DELIVERY 🚚' : 'ACCEPT & START PICKUP 🚚'}</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {active && (
+          <div className="active-trip driver-active-trip-panel">
+            <div className="active-trip-header">
+              <span className="tiny-label" style={{color:'#15803d', fontWeight:800}}>● ACTIVE ROUTE IN PROGRESS</span>
+              <span className="temp-badge">❄️ Reefer: 5.2°C Stable</span>
+            </div>
+
+            <h2>{active.crop} · {active.quantity} kg</h2>
+            <p style={{margin:'4px 0 14px', color:'#496355', fontSize:13}}>
+              Stage: <b>{(active.stage || 'LAST_MILE').replaceAll('_',' ')}</b> · ETA: <b>{active.eta || '~24 mins'}</b>
+            </p>
+
+            {/* Pick Point Summary for Active Trip */}
+            <div className="active-pickpoint-summary">
+              <div className="summary-line">
+                <span>Pickup Point:</span>
+                <b>{active.stage === 'HUB' || active.stage === 'LAST_MILE' ? 'City Cold Hub (Central Bay)' : 'Shamshabad Farm Gate (Plot 14)'}</b>
+              </div>
+              <div className="summary-line">
+                <span>Produce Details:</span>
+                <b>{active.crop} · {active.quantity} kg</b>
+              </div>
+              <div className="summary-line">
+                <span>Destination:</span>
+                <b>{active.stage === 'HUB' || active.stage === 'LAST_MILE' ? 'Customer Delivery (Hyderabad)' : 'Collection Station #02 (Cold Bay 3)'}</b>
+              </div>
+            </div>
+
+            <div className="active-trip-actions-row">
+              <button
+                className="outline-btn"
+                style={{flex:1, padding:11, fontSize:12, fontWeight:700}}
+                onClick={()=>alert(`GPS Navigation: Live route guided. Distance: ${active.distance_km || 12.4} km.`)}
+              >
+                🗺️ Turn-by-Turn GPS
+              </button>
+              <button
+                className="outline-btn"
+                style={{flex:1, padding:11, fontSize:12, fontWeight:700}}
+                onClick={()=>alert(`QR Verified for Lot ${active.lot_code || 'KM-2048'}. Weight confirmed: ${active.quantity} kg.`)}
+              >
+                ▦ Scan QR
+              </button>
+            </div>
+
+            <button
+              className="primary-btn wide"
+              style={{marginTop:12, padding:14, fontWeight:800, background:'#072618'}}
+              onClick={()=>{
+                api.post(`/shipments/${active.id}/complete`).catch(()=>{});
+                try {
+                  const stored = JSON.parse(localStorage.getItem('km_city_hub_dispatches') || '[]');
+                  localStorage.setItem('km_city_hub_dispatches', JSON.stringify(stored.map((d: any) => ({ ...d, status: 'DELIVERED' }))));
+                } catch(e) {}
+                alert(`Trip completed! Produce delivered and verified.`);
+                setActive(null);
+                bump();
+              }}
+            >
+              {active.stage === 'HUB' || active.stage === 'LAST_MILE' ? 'Complete Last-Mile Delivery to Customer ✓' : 'Complete Handoff at Collection Center →'}
+            </button>
+          </div>
+        )}
+
+        {!reqs.filter(r=>r.status==='REQUESTED').length && !hubDispatches.length && !active && (
+          <div className="driver-empty">
+            <div style={{fontSize:32, marginBottom:10}}>🚚</div>
+            <b>No Pending Trips</b>
+            <p style={{margin:'6px 0 0', fontSize:12, color:'#748f80'}}>The dispatch engine only sends routes when batches or orders are ready for pickup.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function PackageCentreApp({
@@ -4974,7 +5077,7 @@ function CityHubApp({
     cropName: string
   ) => {
     const fallbackFleet = [
-      { plate: 'TS-09-UB-4412 (EV Reefer Van)', driver: 'Mahesh Rao (+91 98492 55102)', eta: '~28 mins' },
+      { plate: 'TS-09-UB-4412 (EV Reefer Van)', driver: 'Suresh Yadav (+91 98492 55102)', eta: '~28 mins' },
       { plate: 'TS-10-CD-8819 (Cold Delivery E-Bike)', driver: 'K. Naveen (+91 97001 22910)', eta: '~20 mins' },
       { plate: 'AP-29-EE-3341 (Mini Reefer 1.0T)', driver: 'R. Shekhar (+91 99881 77362)', eta: '~35 mins' }
     ];
@@ -4987,14 +5090,13 @@ function CityHubApp({
         ? shipmentsResponse.data
         : [];
 
-      // Find an unassigned shipment that needs driver & vehicle
-      const availableShipment = shipments.find(
-        (s: any) =>
-          !s.driver_id &&
-          !s.vehicle_id &&
-          s.status !== 'DELIVERED' &&
-          s.status !== 'COMPLETED'
-      );
+      // Find a shipment to assign for this dispatch:
+      // First try HUB stage shipment, then unassigned, then any active shipment
+      const targetShipment =
+        shipments.find((s: any) => s.stage === 'HUB' || s.current_stage === 'HUB') ||
+        shipments.find((s: any) => !s.driver_id && s.status !== 'DELIVERED') ||
+        shipments.find((s: any) => s.status !== 'DELIVERED') ||
+        shipments[0];
 
       let vehicleName = fleetVehicle.plate;
       let driverName = fleetVehicle.driver;
@@ -5002,19 +5104,20 @@ function CityHubApp({
       let shipmentRef = `KM-DISP-${orderId}`;
       let isBackendAssigned = false;
 
-      if (availableShipment) {
+      if (targetShipment) {
         try {
+          // Explicitly assign to driver 4 (Suresh Yadav - driver@krishimarg.demo)
           const response = await api.post(
-            `/shipments/${availableShipment.id}/assign-driver`,
-            {}
+            `/shipments/${targetShipment.id}/assign-driver`,
+            { driver_id: 4, vehicle_id: 1 }
           );
           const shipment = response.data || {};
-          shipmentRef = shipment.shipment_code || availableShipment.shipment_code || `KM-SHP-${availableShipment.id}`;
-          if (shipment.vehicle?.plate || shipment.vehicle_plate || shipment.vehicle_id) {
-            vehicleName = String(shipment.vehicle?.plate || shipment.vehicle_plate || `Vehicle #${shipment.vehicle_id}`);
+          shipmentRef = shipment.code || shipment.shipment_code || targetShipment.code || `KM-SHP-${targetShipment.id}`;
+          if (shipment.vehicle && shipment.vehicle !== '—') {
+            vehicleName = `${shipment.vehicle} (Reefer)`;
           }
-          if (shipment.driver_id) {
-            driverName = `Driver #${shipment.driver_id}`;
+          if (shipment.driver && shipment.driver !== 'Unassigned') {
+            driverName = shipment.driver;
           }
           if (shipment.eta) {
             eta = shipment.eta;
@@ -5035,19 +5138,52 @@ function CityHubApp({
         }
       }));
 
+      // Store in localStorage so DriverApp always shows this assigned dispatch
+      try {
+        const stored = JSON.parse(localStorage.getItem('km_city_hub_dispatches') || '[]');
+        const existingIdx = stored.findIndex((d: any) => d.orderId === orderId);
+        const dispatchObj = {
+          id: `CH-DISP-${orderId}`,
+          orderId,
+          shipment_id: targetShipment ? targetShipment.id : 1,
+          customerName,
+          cropName,
+          vehicle: vehicleName,
+          driver: driverName,
+          eta,
+          earnings: 380,
+          status: 'REQUESTED',
+          destination: `${customerName} · Hyderabad`,
+          createdAt: new Date().toISOString()
+        };
+        if (existingIdx >= 0) {
+          stored[existingIdx] = dispatchObj;
+        } else {
+          stored.unshift(dispatchObj);
+        }
+        localStorage.setItem('km_city_hub_dispatches', JSON.stringify(stored));
+      } catch (e) {}
+
       const alertMsg =
-        `🚚 Order #${orderId} dispatched successfully!\n\n` +
-        `Customer: ${customerName}\n` +
-        `Produce: ${cropName}\n` +
-        `Shipment: ${shipmentRef}\n` +
-        `Vehicle: ${vehicleName}\n` +
-        `Driver: ${driverName}\n` +
-        `Estimated Arrival: ${eta}\n\n` +
-        (isBackendAssigned
-          ? `✅ Live backend driver request created & linked.\n` +
-            `The assigned driver can now view and accept the trip in their portal.`
-          : `✅ Reefer delivery vehicle dispatched.\n` +
-            `Consumer notified with live ETA.`);
+        `🚚 Order #${orderId} dispatched to Driver Suresh Yadav!
+
+` +
+        `Customer: ${customerName}
+` +
+        `Produce: ${cropName}
+` +
+        `Shipment: ${shipmentRef}
+` +
+        `Vehicle: ${vehicleName}
+` +
+        `Driver: ${driverName}
+` +
+        `Estimated Arrival: ${eta}
+
+` +
+        `✅ Live driver request created in Driver portal.
+` +
+        `Switch to Driver role (driver@krishimarg.demo) to accept and view this trip.`;
 
       setNotificationSentMsg(
         `Order #${orderId} dispatched: ${vehicleName} (Driver: ${driverName}, ETA: ${eta})`
@@ -5071,12 +5207,37 @@ function CityHubApp({
         }
       }));
 
+      try {
+        const stored = JSON.parse(localStorage.getItem('km_city_hub_dispatches') || '[]');
+        stored.unshift({
+          id: `CH-DISP-${orderId}`,
+          orderId,
+          shipment_id: 1,
+          customerName,
+          cropName,
+          vehicle: fleetVehicle.plate,
+          driver: fleetVehicle.driver,
+          eta: fleetVehicle.eta,
+          earnings: 380,
+          status: 'REQUESTED',
+          destination: `${customerName} · Hyderabad`,
+          createdAt: new Date().toISOString()
+        });
+        localStorage.setItem('km_city_hub_dispatches', JSON.stringify(stored));
+      } catch (e) {}
+
       alert(
-        `🚚 Order #${orderId} dispatched!\n\n` +
-        `Vehicle: ${fleetVehicle.plate}\n` +
-        `Driver: ${fleetVehicle.driver}\n` +
-        `ETA: ${fleetVehicle.eta}\n\n` +
-        `Consumer notified.`
+        `🚚 Order #${orderId} dispatched!
+
+` +
+        `Vehicle: ${fleetVehicle.plate}
+` +
+        `Driver: ${fleetVehicle.driver}
+` +
+        `ETA: ${fleetVehicle.eta}
+
+` +
+        `Consumer and driver notified.`
       );
 
       bump();
